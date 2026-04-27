@@ -49,6 +49,191 @@ const (
 )
 
 // =============================================================================
+// Gas cost mapping
+// =============================================================================
+
+// GasCosts defines the gas cost for each WASM instruction type.
+// These costs are based on ewasm documentation and typical WASM execution patterns.
+// Base costs are in "particles" (1/10000 of a gas unit) for precision.
+var GasCosts = map[string]uint64{
+	// Control flow instructions
+	"unreachable":  1,
+	"nop":          1,
+	"block":        1,
+	"loop":         1,
+	"if":           1,
+	"else":         1,
+	"end":          1,
+	"br":           2,
+	"br_if":        3,
+	"br_table":     4, // Variable cost based on table size
+	"return":       1,
+	"call":         5,
+	"call_indirect": 10,
+
+	// Variable access
+	"local.get":    2,
+	"local.set":    2,
+	"local.tee":    2,
+	"global.get":   3,
+	"global.set":   3,
+
+	// Memory operations
+	"i32.load":     3,
+	"i64.load":     3,
+	"f32.load":     3,
+	"f64.load":     3,
+	"i32.store":    3,
+	"i64.store":    3,
+	"f32.store":    3,
+	"f64.store":    3,
+	"memory.size":  5,
+	"memory.grow":  10,
+
+	// Constants
+	"i32.const":    1,
+	"i64.const":    1,
+	"f32.const":    1,
+	"f64.const":    1,
+
+	// i32 comparison
+	"i32.eqz":      1,
+	"i32.eq":       1,
+	"i32.ne":       1,
+	"i32.lt_s":     1,
+	"i32.lt_u":     1,
+	"i32.gt_s":     1,
+	"i32.gt_u":     1,
+	"i32.le_s":     1,
+	"i32.le_u":     1,
+	"i32.ge_s":     1,
+	"i32.ge_u":     1,
+
+	// i64 comparison
+	"i64.eqz":      1,
+	"i64.eq":       1,
+	"i64.ne":       1,
+	"i64.lt_s":     1,
+	"i64.lt_u":     1,
+	"i64.gt_s":     1,
+	"i64.gt_u":     1,
+	"i64.le_s":     1,
+	"i64.le_u":     1,
+	"i64.ge_s":     1,
+	"i64.ge_u":     1,
+
+	// i32 arithmetic
+	"i32.clz":      10, // Complex instruction
+	"i32.ctz":      10, // Complex instruction
+	"i32.popcnt":   8,  // Complex instruction
+	"i32.add":      1,
+	"i32.sub":      1,
+	"i32.mul":      3,
+	"i32.div_s":    5,
+	"i32.div_u":    5,
+	"i32.rem_s":    5,
+	"i32.rem_u":    5,
+	"i32.and":      1,
+	"i32.or":       1,
+	"i32.xor":      1,
+	"i32.shl":      1,
+	"i32.shr_s":    1,
+	"i32.shr_u":    1,
+	"i32.rotl":     2,
+	"i32.rotr":     2,
+
+	// i64 arithmetic
+	"i64.clz":      12, // Complex instruction
+	"i64.ctz":      12, // Complex instruction
+	"i64.popcnt":   10, // Complex instruction
+	"i64.add":      1,
+	"i64.sub":      1,
+	"i64.mul":      5,
+	"i64.div_s":    7,
+	"i64.div_u":    7,
+	"i64.rem_s":    7,
+	"i64.rem_u":    7,
+	"i64.and":      1,
+	"i64.or":       1,
+	"i64.xor":      1,
+	"i64.shl":      1,
+	"i64.shr_s":    1,
+	"i64.shr_u":    1,
+	"i64.rotl":     2,
+	"i64.rotr":     2,
+
+	// f32 arithmetic
+	"f32.add":      3,
+	"f32.sub":      3,
+	"f32.mul":      3,
+	"f32.div":      5,
+	"f32.min":      3,
+	"f32.max":      3,
+	"f32.abs":      2,
+	"f32.neg":      2,
+	"f32.sqrt":     5,
+	"f32.ceil":     5,
+	"f32.floor":    5,
+	"f32.trunc":    5,
+	"f32.nearest":  5,
+
+	// f64 arithmetic
+	"f64.add":      3,
+	"f64.sub":      3,
+	"f64.mul":      3,
+	"f64.div":      5,
+	"f64.min":      3,
+	"f64.max":      3,
+	"f64.abs":      2,
+	"f64.neg":      2,
+	"f64.sqrt":     5,
+	"f64.ceil":     5,
+	"f64.floor":    5,
+	"f64.trunc":    5,
+	"f64.nearest":  5,
+
+	// Conversions
+	"i32.wrap_i64":     1,
+	"i64.extend_i32_s": 2,
+	"i64.extend_i32_u": 2,
+	"f32.convert_i32_s": 3,
+	"f32.convert_i32_u": 3,
+	"f32.convert_i64_s": 3,
+	"f32.convert_i64_u": 3,
+	"f64.convert_i32_s": 3,
+	"f64.convert_i32_u": 3,
+	"f64.convert_i64_s": 3,
+	"f64.convert_i64_u": 3,
+	"f32.demote_f64":   3,
+	"f64.promote_f32":  3,
+	"i32.trunc_f32_s":  5,
+	"i32.trunc_f32_u":  5,
+	"i32.trunc_f64_s":  5,
+	"i32.trunc_f64_u":  5,
+	"i64.trunc_f32_s":  5,
+	"i64.trunc_f32_u":  5,
+	"i64.trunc_f64_s":  5,
+	"i64.trunc_f64_u":  5,
+	"f32.reinterpret_i32": 2,
+	"f64.reinterpret_i64": 2,
+	"i32.reinterpret_f32": 2,
+	"i64.reinterpret_f64": 2,
+
+	// Miscellaneous
+	"drop":        1,
+	"select":      3, // Complex instruction
+}
+
+// GetGasCost returns the gas cost for a given instruction mnemonic.
+// If the instruction is not in the mapping, it returns a default cost of 1.
+func GetGasCost(mnemonic string) uint64 {
+	if cost, ok := GasCosts[mnemonic]; ok {
+		return cost
+	}
+	return 1 // Default cost for unknown instructions
+}
+
+// =============================================================================
 // Instruction representation
 // =============================================================================
 
@@ -64,6 +249,8 @@ type Instruction struct {
 	Operands string
 	// Size is the number of bytes this instruction occupies.
 	Size int
+	// GasCost is the gas cost for this instruction in particles.
+	GasCost uint64
 }
 
 // String formats the instruction in WAT style.
@@ -88,6 +275,8 @@ type Snippet struct {
 	TargetIndex int
 	// FuncIndex is the function index this snippet belongs to, if known.
 	FuncIndex int
+	// ShowGasCosts indicates whether to display gas costs alongside instructions.
+	ShowGasCosts bool
 }
 
 // Format renders the snippet as a human-readable WAT text block with an
@@ -103,9 +292,22 @@ func (s *Snippet) Format() string {
 		if i == s.TargetIndex {
 			marker = "> "
 		}
-		fmt.Fprintf(&b, "%s0x%04x: %s\n", marker, inst.Offset, inst.String())
+		
+		if s.ShowGasCosts {
+			gasUnits := float64(inst.GasCost) / 10000.0
+			fmt.Fprintf(&b, "%s0x%04x: %-20s [gas: %d particles (%.4f)]\n", 
+				marker, inst.Offset, inst.String(), inst.GasCost, gasUnits)
+		} else {
+			fmt.Fprintf(&b, "%s0x%04x: %s\n", marker, inst.Offset, inst.String())
+		}
 	}
 	return b.String()
+}
+
+// FormatWithGas renders the snippet with gas cost information.
+func (s *Snippet) FormatWithGas() string {
+	s.ShowGasCosts = true
+	return s.Format()
 }
 
 // =============================================================================
@@ -200,6 +402,17 @@ func (d *Disassembler) DisassembleAt(targetOffset uint64, contextLines int) (*Sn
 	}, nil
 }
 
+// DisassembleAtWithGas decodes instructions around the given byte offset and
+// includes gas cost information in the output.
+func (d *Disassembler) DisassembleAtWithGas(targetOffset uint64, contextLines int) (*Snippet, error) {
+	snippet, err := d.DisassembleAt(targetOffset, contextLines)
+	if err != nil {
+		return nil, err
+	}
+	snippet.ShowGasCosts = true
+	return snippet, nil
+}
+
 // DecodeAll decodes all instructions in the code section.
 func (d *Disassembler) DecodeAll() ([]Instruction, error) {
 	if !d.IsValidWasm() {
@@ -212,6 +425,118 @@ func (d *Disassembler) DecodeAll() ([]Instruction, error) {
 	}
 
 	return d.decodeInstructions(codeStart, codeEnd)
+}
+
+// GasCostAnalysis provides gas cost statistics for decoded instructions.
+type GasCostAnalysis struct {
+	// TotalInstructions is the total number of instructions decoded.
+	TotalInstructions int `json:"total_instructions"`
+	// TotalGasCost is the sum of all instruction gas costs in particles.
+	TotalGasCost uint64 `json:"total_gas_cost"`
+	// AverageGasCost is the average gas cost per instruction in particles.
+	AverageGasCost uint64 `json:"average_gas_cost"`
+	// InstructionCounts maps instruction mnemonics to their execution counts.
+	InstructionCounts map[string]int `json:"instruction_counts"`
+	// InstructionGasCosts maps instruction mnemonics to their total gas cost.
+	InstructionGasCosts map[string]uint64 `json:"instruction_gas_costs"`
+	// AverageGasCostByInstruction maps instruction mnemonics to their average gas cost.
+	AverageGasCostByInstruction map[string]uint64 `json:"average_gas_cost_by_instruction"`
+}
+
+// AnalyzeGasCosts performs gas cost analysis on all decoded instructions.
+func (d *Disassembler) AnalyzeGasCosts() (*GasCostAnalysis, error) {
+	instructions, err := d.DecodeAll()
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode instructions: %w", err)
+	}
+
+	if len(instructions) == 0 {
+		return &GasCostAnalysis{}, nil
+	}
+
+	analysis := &GasCostAnalysis{
+		TotalInstructions:           len(instructions),
+		InstructionCounts:           make(map[string]int),
+		InstructionGasCosts:         make(map[string]uint64),
+		AverageGasCostByInstruction: make(map[string]uint64),
+	}
+
+	for _, inst := range instructions {
+		analysis.InstructionCounts[inst.Mnemonic]++
+		analysis.InstructionGasCosts[inst.Mnemonic] += inst.GasCost
+		analysis.TotalGasCost += inst.GasCost
+	}
+
+	// Calculate average gas costs per instruction type
+	for mnemonic, totalCost := range analysis.InstructionGasCosts {
+		count := analysis.InstructionCounts[mnemonic]
+		if count > 0 {
+			analysis.AverageGasCostByInstruction[mnemonic] = totalCost / uint64(count)
+		}
+	}
+
+	// Calculate overall average gas cost
+	if analysis.TotalInstructions > 0 {
+		analysis.AverageGasCost = analysis.TotalGasCost / uint64(analysis.TotalInstructions)
+	}
+
+	return analysis, nil
+}
+
+// FormatGasAnalysis formats the gas cost analysis as a human-readable string.
+func (a *GasCostAnalysis) Format() string {
+	if a.TotalInstructions == 0 {
+		return "No instructions to analyze"
+	}
+
+	var b strings.Builder
+	fmt.Fprintf(&b, "Gas Cost Analysis\n")
+	fmt.Fprintf(&b, "================\n")
+	fmt.Fprintf(&b, "Total Instructions: %d\n", a.TotalInstructions)
+	fmt.Fprintf(&b, "Total Gas Cost: %d particles (%.4f gas units)\n", a.TotalGasCost, float64(a.TotalGasCost)/10000.0)
+	fmt.Fprintf(&b, "Average Gas Cost: %d particles (%.4f gas units)\n\n", a.AverageGasCost, float64(a.AverageGasCost)/10000.0)
+
+	// Sort instructions by total gas cost (descending)
+	type instructionStat struct {
+		mnemonic  string
+		count     int
+		totalCost uint64
+		avgCost   uint64
+	}
+
+	var stats []instructionStat
+	for mnemonic := range a.InstructionCounts {
+		stats = append(stats, instructionStat{
+			mnemonic:  mnemonic,
+			count:     a.InstructionCounts[mnemonic],
+			totalCost: a.InstructionGasCosts[mnemonic],
+			avgCost:   a.AverageGasCostByInstruction[mnemonic],
+		})
+	}
+
+	sort.Slice(stats, func(i, j int) bool {
+		return stats[i].totalCost > stats[j].totalCost
+	})
+
+	fmt.Fprintf(&b, "Top Instructions by Total Gas Cost:\n")
+	fmt.Fprintf(&b, "%-20s %-8s %-12s %-12s %-8s\n", "Instruction", "Count", "Total Cost", "Avg Cost", "% of Total")
+	fmt.Fprintf(&b, "%-20s %-8s %-12s %-12s %-8s\n", "----------", "-----", "-----------", "---------", "----------")
+
+	for _, stat := range stats[:min(20, len(stats))] {
+		percentage := float64(stat.totalCost) / float64(a.TotalGasCost) * 100
+		fmt.Fprintf(&b, "%-20s %-8d %-12d %-12d %-8.2f\n",
+			stat.mnemonic, stat.count, stat.totalCost, stat.avgCost, percentage)
+	}
+
+	return b.String()
+}
+
+// min returns the minimum of two integers
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }
 
 // findCodeSection locates the code section in the WASM module and returns
@@ -442,6 +767,7 @@ func (d *Disassembler) decodeFuncBody(body funcBodyRange) []Instruction {
 			Mnemonic: mnemonic,
 			Operands: operands,
 			Size:     1 + consumed,
+			GasCost:  GetGasCost(mnemonic),
 		})
 
 		if mnemonic == "i32.const" {
