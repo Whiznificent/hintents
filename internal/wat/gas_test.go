@@ -324,3 +324,45 @@ func TestFormatGasAnalysis_Sorting(t *testing.T) {
 		t.Error("Expected total gas cost in output")
 	}
 }
+
+func TestFormatGasAnalysis_CustomSorting(t *testing.T) {
+	// Create a WASM module with instructions that have different gas costs
+	body := []byte{
+		0x41, 0x01, // i32.const 1 (cost: 1)
+		0x41, 0x02, // i32.const 2 (cost: 1)
+		0x6c,       // i32.mul (cost: 3)
+		0x6d,       // i32.div_u (cost: 5)
+		0x1a,       // drop (cost: 1)
+	}
+	wasm := buildMinimalWasm(body)
+
+	dis := NewDisassembler(wasm)
+	analysis, err := dis.AnalyzeGasCosts()
+	if err != nil {
+		t.Fatalf("AnalyzeGasCosts failed: %v", err)
+	}
+
+	// Test sorting by total cost
+	output := analysis.FormatWithCustomSorting("total-cost")
+	if !strings.Contains(output, "Top Instructions by Total Gas Cost:") {
+		t.Error("Expected 'Top Instructions by Total Gas Cost:' in output")
+	}
+
+	// Test sorting by average cost
+	output = analysis.FormatWithCustomSorting("average-cost")
+	if !strings.Contains(output, "Top Instructions by Average Gas Cost:") {
+		t.Error("Expected 'Top Instructions by Average Gas Cost:' in output")
+	}
+
+	// Test sorting by count
+	output = analysis.FormatWithCustomSorting("count")
+	if !strings.Contains(output, "Top Instructions by Count:") {
+		t.Error("Expected 'Top Instructions by Count:' in output")
+	}
+
+	// Test default sorting (should be total-cost)
+	output = analysis.FormatWithCustomSorting("invalid")
+	if !strings.Contains(output, "Top Instructions by Total Gas Cost:") {
+		t.Error("Expected default sorting to be total-cost")
+	}
+}

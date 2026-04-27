@@ -807,6 +807,11 @@ func (d *Disassembler) AnalyzeGasCosts() (*GasCostAnalysis, error) {
 
 // FormatGasAnalysis formats the gas cost analysis as a human-readable string.
 func (a *GasCostAnalysis) Format() string {
+	return a.FormatWithCustomSorting("total-cost")
+}
+
+// FormatWithCustomSorting formats the gas cost analysis with custom sorting options.
+func (a *GasCostAnalysis) FormatWithCustomSorting(sortBy string) string {
 	if a.TotalInstructions == 0 {
 		return "No instructions to analyze"
 	}
@@ -818,7 +823,7 @@ func (a *GasCostAnalysis) Format() string {
 	fmt.Fprintf(&b, "Total Gas Cost: %d particles (%.4f gas units)\n", a.TotalGasCost, float64(a.TotalGasCost)/10000.0)
 	fmt.Fprintf(&b, "Average Gas Cost: %d particles (%.4f gas units)\n\n", a.AverageGasCost, float64(a.AverageGasCost)/10000.0)
 
-	// Sort instructions by total gas cost (descending)
+	// Sort instructions based on the specified criteria
 	type instructionStat struct {
 		mnemonic  string
 		count     int
@@ -836,11 +841,31 @@ func (a *GasCostAnalysis) Format() string {
 		})
 	}
 
-	sort.Slice(stats, func(i, j int) bool {
-		return stats[i].totalCost > stats[j].totalCost
-	})
+	// Apply sorting based on the sortBy parameter
+	switch sortBy {
+	case "total-cost":
+		sort.Slice(stats, func(i, j int) bool {
+			return stats[i].totalCost > stats[j].totalCost
+		})
+		fmt.Fprintf(&b, "Top Instructions by Total Gas Cost:\n")
+	case "average-cost":
+		sort.Slice(stats, func(i, j int) bool {
+			return stats[i].avgCost > stats[j].avgCost
+		})
+		fmt.Fprintf(&b, "Top Instructions by Average Gas Cost:\n")
+	case "count":
+		sort.Slice(stats, func(i, j int) bool {
+			return stats[i].count > stats[j].count
+		})
+		fmt.Fprintf(&b, "Top Instructions by Count:\n")
+	default:
+		// Default to total-cost
+		sort.Slice(stats, func(i, j int) bool {
+			return stats[i].totalCost > stats[j].totalCost
+		})
+		fmt.Fprintf(&b, "Top Instructions by Total Gas Cost:\n")
+	}
 
-	fmt.Fprintf(&b, "Top Instructions by Total Gas Cost:\n")
 	fmt.Fprintf(&b, "%-20s %-8s %-12s %-12s %-8s\n", "Instruction", "Count", "Total Cost", "Avg Cost", "% of Total")
 	fmt.Fprintf(&b, "%-20s %-8s %-12s %-12s %-8s\n", "----------", "-----", "-----------", "---------", "----------")
 
