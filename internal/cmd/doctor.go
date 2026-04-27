@@ -140,12 +140,14 @@ func runDoctor(cmd *cobra.Command, args []string) error {
 		status := "[OK]"
 		statusColor := "\033[32m" // Green
 		if !dep.Installed {
-			status = "[FAIL]"
-			statusColor = "\033[31m" // Red
 			allOK = false
 			if dep.Fixable {
 				fixableCount++
 				status = "[FAIL*]" // * indicates fixable
+				statusColor = "\033[33m" // Yellow for fixable issues
+			} else {
+				status = "[FAIL]"
+				statusColor = "\033[31m" // Red for non-fixable issues
 			}
 		}
 
