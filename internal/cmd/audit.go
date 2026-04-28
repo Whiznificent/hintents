@@ -180,3 +180,8 @@ func VerifyAuditLog(auditLog *AuditLog) (bool, error) {
 
 	return ed25519.Verify(ed25519.PublicKey(pubKeyBytes), hash[:], sigBytes), nil
 }
+
+// ToJSON implements the audit.AuditLog interface
+func (a *AuditLog) ToJSON() ([]byte, error) {
+	return json.Marshal(a)
+}

@@ -819,13 +819,32 @@ Local WASM Replay Mode:
 
 			fmt.Printf("\n=== Decentralised Storage ===\n")
 
-			if publishIPFSFlag {
-				result, ipfsErr := pub.PublishIPFS(ctx, auditBytes)
-				if ipfsErr != nil {
-					fmt.Printf("IPFS publish failed: %v\n", ipfsErr)
-				} else {
-					fmt.Printf("IPFS CID : %s\n", result.CID)
-					fmt.Printf("IPFS URL : %s\n", result.URL)
+			// Automatically publish to IPFS for compliance
+			result, ipfsErr := pub.PublishIPFS(ctx, auditBytes)
+			if ipfsErr != nil {
+				fmt.Printf("IPFS publish failed: %v\n", ipfsErr)
+			} else {
+				fmt.Printf("IPFS CID : %s\n", result.CID)
+				fmt.Printf("IPFS URL : %s\n", result.URL)
+				
+				// Store IPFS information in current session
+				if currentData != nil {
+					currentData.AuditCID = result.CID
+					currentData.AuditURL = result.URL
+					currentData.AuditTimestamp = time.Now().UTC().Format(time.RFC3339)
+					
+					// Save updated session
+					store, saveErr := session.NewStore()
+					if saveErr != nil {
+						fmt.Printf("Warning: failed to save session IPFS data: %v\n", saveErr)
+					} else {
+						defer store.Close()
+						if saveErr := store.Save(ctx, currentData); saveErr != nil {
+							fmt.Printf("Warning: failed to update session with IPFS data: %v\n", saveErr)
+						} else {
+							fmt.Printf("Audit trail stored in session: %s\n", currentData.ID)
+						}
+					}
 				}
 			}
 

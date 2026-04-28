@@ -48,6 +48,11 @@ type Data struct {
 	// Metadata
 	ErstVersion   string `json:"erst_version"`
 	SchemaVersion int    `json:"schema_version"`
+
+	// IPFS Audit Trail
+	AuditCID      string `json:"audit_cid"`       // CID of the signed audit report on IPFS
+	AuditURL      string `json:"audit_url"`       // Public gateway URL for the audit report
+	AuditTimestamp string `json:"audit_timestamp"` // When the audit was pinned to IPFS
 }
 
 // Store manages session persistence in SQLite
@@ -108,16 +113,30 @@ func (s *Store) initSchema() error {
 		sim_request_json TEXT,
 		sim_response_json TEXT,
 		erst_version TEXT,
-		schema_version INTEGER NOT NULL
+		schema_version INTEGER NOT NULL,
+		audit_cid TEXT,
+		audit_url TEXT,
+		audit_timestamp TIMESTAMP
 	);
 	
 	CREATE INDEX IF NOT EXISTS idx_last_access ON sessions(last_access_at);
 	CREATE INDEX IF NOT EXISTS idx_tx_hash ON sessions(tx_hash);
+	CREATE INDEX IF NOT EXISTS idx_audit_cid ON sessions(audit_cid);
 	`
 
 	if _, err := s.db.Exec(query); err != nil {
 		return fmt.Errorf("failed to create schema: %w", err)
 	}
+
+	// Add new columns for existing databases (migration)
+	migration := `
+	ALTER TABLE sessions ADD COLUMN audit_cid TEXT;
+	ALTER TABLE sessions ADD COLUMN audit_url TEXT;
+	ALTER TABLE sessions ADD COLUMN audit_timestamp TIMESTAMP;
+	`
+	
+	// Try to add columns, ignore errors if they already exist
+	s.db.Exec(migration)
 
 	return nil
 }
@@ -139,8 +158,9 @@ func (s *Store) Save(ctx context.Context, data *Data) error {
 	INSERT INTO sessions (
 		id, created_at, last_access_at, status, network, horizon_url, tx_hash,
 		envelope_xdr, result_xdr, result_meta_xdr,
-		sim_request_json, sim_response_json, erst_version, schema_version
-	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		sim_request_json, sim_response_json, erst_version, schema_version,
+		audit_cid, audit_url, audit_timestamp
+	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	ON CONFLICT(id) DO UPDATE SET
 		last_access_at = excluded.last_access_at,
 		status = excluded.status,
@@ -153,7 +173,10 @@ func (s *Store) Save(ctx context.Context, data *Data) error {
 		sim_request_json = excluded.sim_request_json,
 		sim_response_json = excluded.sim_response_json,
 		erst_version = excluded.erst_version,
-		schema_version = excluded.schema_version
+		schema_version = excluded.schema_version,
+		audit_cid = excluded.audit_cid,
+		audit_url = excluded.audit_url,
+		audit_timestamp = excluded.audit_timestamp
 	`
 
 	_, err := s.db.ExecContext(ctx, query,
@@ -162,6 +185,7 @@ func (s *Store) Save(ctx context.Context, data *Data) error {
 		data.EnvelopeXdr, data.ResultXdr, data.ResultMetaXdr,
 		data.SimRequestJSON, data.SimResponseJSON,
 		data.ErstVersion, data.SchemaVersion,
+		data.AuditCID, data.AuditURL, data.AuditTimestamp,
 	)
 
 	if err != nil {
@@ -177,13 +201,14 @@ func (s *Store) Load(ctx context.Context, sessionID string) (*Data, error) {
 	query := `
 	SELECT id, created_at, last_access_at, status, network, horizon_url, tx_hash,
 	       envelope_xdr, result_xdr, result_meta_xdr,
-	       sim_request_json, sim_response_json, erst_version, schema_version
+	       sim_request_json, sim_response_json, erst_version, schema_version,
+	       audit_cid, audit_url, audit_timestamp
 	FROM sessions
 	WHERE id = ?
 	`
 
 	var data Data
-	var createdAt, lastAccessAt string
+	var createdAt, lastAccessAt, auditTimestamp sql.NullString
 
 	err := s.db.QueryRowContext(ctx, query, sessionID).Scan(
 		&data.ID, &createdAt, &lastAccessAt, &data.Status,
@@ -191,6 +216,7 @@ func (s *Store) Load(ctx context.Context, sessionID string) (*Data, error) {
 		&data.EnvelopeXdr, &data.ResultXdr, &data.ResultMetaXdr,
 		&data.SimRequestJSON, &data.SimResponseJSON,
 		&data.ErstVersion, &data.SchemaVersion,
+		&data.AuditCID, &data.AuditURL, &auditTimestamp,
 	)
 
 	if err == sql.ErrNoRows {
@@ -201,11 +227,14 @@ func (s *Store) Load(ctx context.Context, sessionID string) (*Data, error) {
 	}
 
 	// Parse timestamps
-	if data.CreatedAt, err = time.Parse(time.RFC3339, createdAt); err != nil {
+	if data.CreatedAt, err = time.Parse(time.RFC3339, createdAt.String); err != nil {
 		return nil, fmt.Errorf("failed to parse created_at: %w", err)
 	}
-	if data.LastAccessAt, err = time.Parse(time.RFC3339, lastAccessAt); err != nil {
+	if data.LastAccessAt, err = time.Parse(time.RFC3339, lastAccessAt.String); err != nil {
 		return nil, fmt.Errorf("failed to parse last_access_at: %w", err)
+	}
+	if auditTimestamp.Valid {
+		data.AuditTimestamp = auditTimestamp.String
 	}
 
 	// Update last_access_at on load
@@ -227,7 +256,8 @@ func (s *Store) List(ctx context.Context, limit int) ([]*Data, error) {
 	query := `
 	SELECT id, created_at, last_access_at, status, network, horizon_url, tx_hash,
 	       envelope_xdr, result_xdr, result_meta_xdr,
-	       sim_request_json, sim_response_json, erst_version, schema_version
+	       sim_request_json, sim_response_json, erst_version, schema_version,
+	       audit_cid, audit_url, audit_timestamp
 	FROM sessions
 	ORDER BY last_access_at DESC
 	LIMIT ?
@@ -242,7 +272,7 @@ func (s *Store) List(ctx context.Context, limit int) ([]*Data, error) {
 	var sessions []*Data
 	for rows.Next() {
 		var data Data
-		var createdAt, lastAccessAt string
+		var createdAt, lastAccessAt, auditTimestamp sql.NullString
 
 		scanErr := rows.Scan(
 			&data.ID, &createdAt, &lastAccessAt, &data.Status,
@@ -250,17 +280,21 @@ func (s *Store) List(ctx context.Context, limit int) ([]*Data, error) {
 			&data.EnvelopeXdr, &data.ResultXdr, &data.ResultMetaXdr,
 			&data.SimRequestJSON, &data.SimResponseJSON,
 			&data.ErstVersion, &data.SchemaVersion,
+			&data.AuditCID, &data.AuditURL, &auditTimestamp,
 		)
 		if scanErr != nil {
 			return nil, fmt.Errorf("failed to scan session: %w", scanErr)
 		}
 
 		// Parse timestamps
-		if data.CreatedAt, scanErr = time.Parse(time.RFC3339, createdAt); scanErr != nil {
+		if data.CreatedAt, scanErr = time.Parse(time.RFC3339, createdAt.String); scanErr != nil {
 			return nil, fmt.Errorf("failed to parse created_at: %w", scanErr)
 		}
-		if data.LastAccessAt, scanErr = time.Parse(time.RFC3339, lastAccessAt); scanErr != nil {
+		if data.LastAccessAt, scanErr = time.Parse(time.RFC3339, lastAccessAt.String); scanErr != nil {
 			return nil, fmt.Errorf("failed to parse last_access_at: %w", scanErr)
+		}
+		if auditTimestamp.Valid {
+			data.AuditTimestamp = auditTimestamp.String
 		}
 
 		sessions = append(sessions, &data)
