@@ -120,8 +120,8 @@ Example:
 	return cmd
 }
 
-func (d *DebugCommand) runDebug(cmd *cobra.Command, args []string) error {
-	txHash := args[0]
+func (d *DebugCommand) runDebug(cmd *cobra.Command, cmdArgs []string) error {
+	txHash := cmdArgs[0]
 
 	token := rpcTokenFlag
 	if token == "" {
@@ -161,12 +161,14 @@ func (d *DebugCommand) runDebug(cmd *cobra.Command, args []string) error {
 
 	fmt.Printf("Transaction fetched successfully. Envelope size: %d bytes\n", len(resp.EnvelopeXdr))
 
-	// TODO: Use d.Runner for simulation when ready
-	// simReq := &simulator.SimulationRequest{
-	//     EnvelopeXdr: resp.EnvelopeXdr,
-	//     ResultMetaXdr: resp.ResultMetaXdr,
-	// }
-	// simResp, err := d.Runner.Run(simReq)
+	simReq := &simulator.SimulationRequest{
+		EnvelopeXdr:   resp.EnvelopeXdr,
+		ResultMetaXdr: resp.ResultMetaXdr,
+	}
+	_, err = d.Runner.Run(cmd.Context(), simReq)
+	if err != nil {
+		return errors.WrapSimulationFailed(err, txHash)
+	}
 
 	return nil
 }
@@ -654,7 +656,7 @@ Local WASM Replay Mode:
 				if err != nil {
 					fmt.Printf("%s Error building call tree for SVG: %v\n", visualizer.Symbol("error"), err)
 				} else {
-					svg := visualizer.GenerateCallGraphSVG(callTree)
+					svg := visualizer.GenerateCallGraphSVG(callTree, maxDepth)
 					err := os.WriteFile(exportSVGFlag, []byte(svg), 0644)
 					if err != nil {
 						fmt.Printf("%s Error saving SVG: %v\n", visualizer.Symbol("error"), err)

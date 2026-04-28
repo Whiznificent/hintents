@@ -13,6 +13,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/dotandev/hintents/internal/endpoints"
 	"github.com/mattn/go-isatty"
 	"github.com/spf13/cobra"
 )
@@ -67,6 +68,7 @@ the preferred RPC URL and network passphrase.`,
 		}
 
 		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Initialized Erst project scaffold in %s\n", targetDir) //nolint:errcheck
+		printInitSuccessBanner(cmd.OutOrStdout())
 		return nil
 	},
 }
@@ -218,13 +220,13 @@ func defaultRPCURLForNetwork(network, override string) string {
 	}
 
 	rpcURL := map[string]string{
-		"public":     "https://soroban.stellar.org",
-		"testnet":    "https://soroban-testnet.stellar.org",
-		"futurenet":  "https://soroban-futurenet.stellar.org",
+		"public":     endpoints.SorobanMainnet,
+		"testnet":    endpoints.SorobanTestnet,
+		"futurenet":  endpoints.SorobanFuturenet,
 		"standalone": "http://localhost:8000",
 	}[network]
 	if rpcURL == "" {
-		rpcURL = "https://soroban-testnet.stellar.org"
+		rpcURL = endpoints.SorobanTestnet
 	}
 
 	return rpcURL
@@ -284,6 +286,17 @@ func renderProjectGitignoreBlock() string {
 *.flamegraph.svg
 *.flamegraph.html
 `
+}
+
+func printInitSuccessBanner(out io.Writer) {
+	banner := `┌─────────────────────────────────────┐
+│ Next steps:                         │
+│ 1. Setup RPC                        │
+│ 2. Build Simulator                  │
+│ 3. Run Doctor                       │
+└─────────────────────────────────────┘
+`
+	_, _ = fmt.Fprint(out, banner) //nolint:errcheck
 }
 
 func isValidInitNetwork(network string) bool {

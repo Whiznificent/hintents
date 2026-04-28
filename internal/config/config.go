@@ -6,15 +6,20 @@ package config
 import (
 	"encoding/json"
 	"os"
+	"path"
 	"path/filepath"
 	"strconv"
-	"strings"
 
+	"github.com/dotandev/hintents/internal/endpoints"
 	"github.com/dotandev/hintents/internal/errors"
 )
 
 func joinPath(parts ...string) string {
-	return strings.Join(parts, "/")
+	cleaned := make([]string, 0, len(parts))
+	for _, part := range parts {
+		cleaned = append(cleaned, filepath.ToSlash(part))
+	}
+	return path.Join(cleaned...)
 }
 
 // -- Interfaces --
@@ -96,7 +101,7 @@ var validLogLevels = map[string]bool{
 }
 
 var defaultConfig = &Config{
-	RpcUrl:           "https://soroban-testnet.stellar.org",
+	RpcUrl:           endpoints.SorobanTestnet,
 	Network:          NetworkTestnet,
 	SimulatorPath:    "",
 	LogLevel:         "info",
@@ -205,11 +210,11 @@ func (c *Config) Validate() error {
 func (c *Config) NetworkURL() string {
 	switch c.Network {
 	case NetworkPublic:
-		return "https://soroban.stellar.org"
+		return endpoints.SorobanMainnet
 	case NetworkTestnet:
-		return "https://soroban-testnet.stellar.org"
+		return endpoints.SorobanTestnet
 	case NetworkFuturenet:
-		return "https://soroban-futurenet.stellar.org"
+		return endpoints.SorobanFuturenet
 	case NetworkStandalone:
 		return "http://localhost:8000"
 	default:
