@@ -4,13 +4,17 @@
 package cmd
 
 import (
+	"crypto/ed25519"
+	"encoding/json"
 	"fmt"
 	"os"
 	"strings"
 	"time"
 
+	"github.com/dotandev/hintents/internal/audit"
 	"github.com/dotandev/hintents/internal/errors"
 	"github.com/dotandev/hintents/internal/session"
+	"github.com/dotandev/hintents/internal/signer"
 	"github.com/spf13/cobra"
 )
 
@@ -29,6 +33,29 @@ func SetCurrentSession(data *session.Data) {
 // GetCurrentSession returns the active session if any
 func GetCurrentSession() *session.Data {
 	return currentData
+}
+
+// generateAuditLog creates a signed audit log for the session data
+func generateAuditLog(txHash, envelopeXdr, resultMetaXdr string, events, logs []string) (*AuditLog, error) {
+	// Create a default in-memory signer for audit generation
+	// In production, this should use a configured signing key
+	privKey := os.Getenv("ERST_AUDIT_PRIVATE_KEY")
+	if privKey == "" {
+		// Generate a temporary key for compliance if none is configured
+		_, priv, err := ed25519.GenerateKey(nil)
+		if err != nil {
+			return nil, fmt.Errorf("failed to generate audit signing key: %w", err)
+		}
+		s := signer.NewInMemorySignerFromKey(priv)
+		return GenerateWithSigner(txHash, envelopeXdr, resultMetaXdr, events, logs, s, nil)
+	}
+
+	s, err := signer.NewInMemorySigner(privKey)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create audit signer: %w", err)
+	}
+
+	return GenerateWithSigner(txHash, envelopeXdr, resultMetaXdr, events, logs, s, nil)
 }
 
 var sessionCmd = &cobra.Command{
@@ -108,15 +135,52 @@ The session ID can be auto-generated or specified with --id flag.`,
 			fmt.Fprintf(os.Stderr, "Warning: cleanup failed: %v\n", err)
 		}
 
-		// Save session
+		// Generate and pin audit report to IPFS for compliance
+		if data.EnvelopeXdr != "" && data.ResultMetaXdr != "" {
+			fmt.Printf("\n=== Generating Compliance Audit Trail ===\n")
+
+			// Parse simulation response to get events and logs
+			var events, logs []string
+			if data.SimResponseJSON != "" {
+				var simResp struct {
+					Events []string `json:"events"`
+					Logs   []string `json:"logs"`
+				}
+				if err := json.Unmarshal([]byte(data.SimResponseJSON), &simResp); err == nil {
+					events = simResp.Events
+					logs = simResp.Logs
+				}
+			}
+
+			// Generate audit log
+			auditLog, err := generateAuditLog(data.TxHash, data.EnvelopeXdr, data.ResultMetaXdr, events, logs)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Warning: failed to generate audit log: %v\n", err)
+			} else {
+				// Publish to IPFS using the audit publisher
+				auditPublisher := audit.NewAuditPublisher()
+				if err := auditPublisher.PublishAuditReport(ctx, auditLog, data); err != nil {
+					fmt.Fprintf(os.Stderr, "Warning: failed to publish audit report to IPFS: %v\n", err)
+				} else {
+					fmt.Printf("  Audit CID: %s\n", data.AuditCID)
+					fmt.Printf("  Audit URL: %s\n", data.AuditURL)
+					fmt.Printf("  Immutable audit trail created for compliance\n")
+				}
+			}
+		}
+
+		// Save session with IPFS audit information
 		if err := store.Save(ctx, data); err != nil {
 			return errors.WrapValidationError(fmt.Sprintf("failed to save session: %v", err))
 		}
 
-		fmt.Printf("Session saved: %s\n", data.ID)
+		fmt.Printf("\nSession saved: %s\n", data.ID)
 		fmt.Printf("  Transaction: %s\n", data.TxHash)
 		fmt.Printf("  Network: %s\n", data.Network)
 		fmt.Printf("  Created: %s\n", data.CreatedAt.Format(time.RFC3339))
+		if data.AuditCID != "" {
+			fmt.Printf("  IPFS Audit: %s\n", data.AuditCID)
+		}
 
 		return nil
 	},
