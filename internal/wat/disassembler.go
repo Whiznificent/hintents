@@ -28,7 +28,7 @@ import (
 // =============================================================================
 
 // WASM magic number and version.
-var wasmMagic = []byte{0x00, 0x61, 0x73, 0x6d}
+var wasmMagic = [4]byte{0x00, 0x61, 0x73, 0x6d}
 
 const wasmVersion = 1
 
@@ -387,22 +387,22 @@ func (s *Snippet) formatWithBasicBlocks(b *strings.Builder) string {
 			marker = "> "
 		}
 		
-		// Check if this instruction is a jump
+			// Check if this instruction is a jump
 		if targetOffset, isJump := s.BasicBlocks.JumpTargets[inst.Offset]; isJump {
 			if s.ShowGasCosts {
 				gasUnits := float64(inst.GasCost) / 10000.0
-				fmt.Fprintf(&b, "%s0x%04x: %-20s [gas: %d particles (%.4f)] [-> 0x%04x]\n", 
+				fmt.Fprintf(b, "%s0x%04x: %-20s [gas: %d particles (%.4f)] [-> 0x%04x]\n",
 					marker, inst.Offset, inst.String(), inst.GasCost, gasUnits, targetOffset)
 			} else {
-				fmt.Fprintf(&b, "%s0x%04x: %s [-> 0x%04x]\n", marker, inst.Offset, inst.String(), targetOffset)
+				fmt.Fprintf(b, "%s0x%04x: %s [-> 0x%04x]\n", marker, inst.Offset, inst.String(), targetOffset)
 			}
 		} else {
 			if s.ShowGasCosts {
 				gasUnits := float64(inst.GasCost) / 10000.0
-				fmt.Fprintf(&b, "%s0x%04x: %-20s [gas: %d particles (%.4f)]\n", 
+				fmt.Fprintf(b, "%s0x%04x: %-20s [gas: %d particles (%.4f)]\n",
 					marker, inst.Offset, inst.String(), inst.GasCost, gasUnits)
 			} else {
-				fmt.Fprintf(&b, "%s0x%04x: %s\n", marker, inst.Offset, inst.String())
+				fmt.Fprintf(b, "%s0x%04x: %s\n", marker, inst.Offset, inst.String())
 			}
 		}
 	}
@@ -669,9 +669,9 @@ func (d *Disassembler) getJumpTarget(inst Instruction, allInstructions []Instruc
 		if len(allInstructions) > 0 {
 			return allInstructions[len(allInstructions)-1].Offset
 		}
+		return 0
 	case "call", "call_indirect":
 		// Call targets are function entry points, which we can't determine from local analysis
-		// For now, return 0 to indicate external target
 		return 0
 	default:
 		return 0
@@ -779,7 +779,11 @@ func (d *Disassembler) AnalyzeGasCosts() (*GasCostAnalysis, error) {
 	}
 
 	if len(instructions) == 0 {
-		return &GasCostAnalysis{}, nil
+		return &GasCostAnalysis{
+			InstructionCounts:           make(map[string]int),
+			InstructionGasCosts:         make(map[string]uint64),
+			AverageGasCostByInstruction: make(map[string]uint64),
+		}, nil
 	}
 
 	analysis := &GasCostAnalysis{
@@ -859,12 +863,103 @@ func (a *GasCostAnalysis) Format() string {
 	return b.String()
 }
 
-// min returns the minimum of two integers
-func min(a, b int) int {
-	if a < b {
-		return a
+// FormatAvgGasCostByType formats a table of average gas cost per instruction
+// type, sorted by average cost descending. This is the output for
+// --gas-cost-mode / the GasCostMode disassembler mode.
+func (a *GasCostAnalysis) FormatAvgGasCostByType() string {
+	if a.TotalInstructions == 0 {
+		return "No instructions to analyze"
 	}
-	return b
+
+	type row struct {
+		mnemonic string
+		avgCost  uint64
+		count    int
+	}
+	rows := make([]row, 0, len(a.AverageGasCostByInstruction))
+	for mnemonic, avg := range a.AverageGasCostByInstruction {
+		rows = append(rows, row{mnemonic, avg, a.InstructionCounts[mnemonic]})
+	}
+	sort.Slice(rows, func(i, j int) bool {
+		if rows[i].avgCost != rows[j].avgCost {
+			return rows[i].avgCost > rows[j].avgCost
+		}
+		return rows[i].mnemonic < rows[j].mnemonic
+	})
+
+	var b strings.Builder
+	fmt.Fprintf(&b, "Average Gas Cost by Instruction Type\n")
+	fmt.Fprintf(&b, "====================================\n")
+	fmt.Fprintf(&b, "%-24s %-12s %-8s\n", "Instruction", "Avg Cost", "Count")
+	fmt.Fprintf(&b, "%-24s %-12s %-8s\n", "------------------------", "------------", "--------")
+	for _, r := range rows {
+		fmt.Fprintf(&b, "%-24s %-12d %-8d\n", r.mnemonic, r.avgCost, r.count)
+	}
+	return b.String()
+}
+
+// DisassembleWithGasCostMode decodes instructions around targetOffset and
+// appends an average-gas-cost-per-type summary table after the snippet.
+// It is the backing implementation for the --gas-cost-mode CLI flag.
+func (d *Disassembler) DisassembleWithGasCostMode(targetOffset uint64, contextLines int) (string, error) {
+	if !d.IsValidWasm() {
+		return "", fmt.Errorf("not a valid WASM module")
+	}
+	codeStart, codeEnd, err := d.findCodeSection()
+	if err != nil {
+		return "", fmt.Errorf("failed to locate code section: %w", err)
+	}
+	instructions, err := d.decodeInstructions(codeStart, codeEnd)
+	if err != nil {
+		return "", fmt.Errorf("failed to decode instructions: %w", err)
+	}
+
+	// Build snippet from already-decoded instructions.
+	targetIdx := 0
+	for i, inst := range instructions {
+		if inst.Offset == targetOffset ||
+			(inst.Offset <= targetOffset && (i+1 >= len(instructions) || instructions[i+1].Offset > targetOffset)) {
+			targetIdx = i
+			break
+		}
+	}
+	start := targetIdx - contextLines
+	if start < 0 {
+		start = 0
+	}
+	end := targetIdx + contextLines + 1
+	if end > len(instructions) {
+		end = len(instructions)
+	}
+	snippet := &Snippet{
+		Instructions: instructions[start:end],
+		TargetOffset: targetOffset,
+		TargetIndex:  targetIdx - start,
+		ShowGasCosts: true,
+	}
+
+	// Build analysis from the same decoded instructions — no second decode pass.
+	analysis := &GasCostAnalysis{
+		TotalInstructions:           len(instructions),
+		InstructionCounts:           make(map[string]int),
+		InstructionGasCosts:         make(map[string]uint64),
+		AverageGasCostByInstruction: make(map[string]uint64),
+	}
+	for _, inst := range instructions {
+		analysis.InstructionCounts[inst.Mnemonic]++
+		analysis.InstructionGasCosts[inst.Mnemonic] += inst.GasCost
+		analysis.TotalGasCost += inst.GasCost
+	}
+	for mnemonic, total := range analysis.InstructionGasCosts {
+		if c := analysis.InstructionCounts[mnemonic]; c > 0 {
+			analysis.AverageGasCostByInstruction[mnemonic] = total / uint64(c)
+		}
+	}
+	if analysis.TotalInstructions > 0 {
+		analysis.AverageGasCost = analysis.TotalGasCost / uint64(analysis.TotalInstructions)
+	}
+
+	return snippet.Format() + "\n" + analysis.FormatAvgGasCostByType(), nil
 }
 
 // findCodeSection locates the code section in the WASM module and returns
@@ -1063,7 +1158,9 @@ func (d *Disassembler) decodeFuncBody(body funcBodyRange) []Instruction {
 	for i := uint64(0); i < localCount && pos < end; i++ {
 		_, m1 := decodeULEB128(d.data[pos:]) // count
 		pos += m1
-		pos++ // valtype byte
+		if pos < end {
+			pos++ // valtype byte
+		}
 	}
 
 	var insts []Instruction
