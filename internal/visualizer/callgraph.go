@@ -14,6 +14,13 @@ import (
 
 var elapsedPattern = regexp.MustCompile(`(?i)elapsed(?:[_\s-]*time)?(?:[_\s-]*(ms|us|ns|s))?[\s:=]+([0-9]+(?:\.[0-9]+)?)`)
 
+var humanReadableGas bool
+
+// SetHumanReadableGas configures whether gas values are rendered in human-readable format.
+func SetHumanReadableGas(enabled bool) {
+	humanReadableGas = enabled
+}
+
 // GenerateCallGraphSVG generates a premium SVG call graph from a decoder.CallNode tree
 func GenerateCallGraphSVG(root *decoder.CallNode, maxDepth int) string {
 	if root == nil {
@@ -155,10 +162,10 @@ func GenerateCallGraphSVG(root *decoder.CallNode, maxDepth int) string {
 		<rect class="node-box" width="%d" height="%d" rx="8" stroke="var(--node-border)" />
 		<text x="12" y="24" class="node-title">%s</text>
 		<text x="12" y="40" class="node-sub">%s%s</text>
-		<text x="12" y="60" class="node-metric" fill="var(--cpu)">CPU: %d</text>
+		<text x="12" y="60" class="node-metric" fill="var(--cpu)">CPU: %s</text>
 		<text x="100" y="60" class="node-metric" fill="var(--mem)">Mem: %s</text>
 		<text x="12" y="78" class="node-metric" fill="var(--text-mute)">Elapsed: %s</text>
-	</g>`, gasLevel(node.CPUInstructions), x, y, nodeWidth, nodeHeight, node.Function, contractShort, collapsedText, node.CPUInstructions, formatBytes(node.MemoryBytes), formatElapsedPerCall(node))
+	</g>`, gasLevel(node.CPUInstructions), x, y, nodeWidth, nodeHeight, node.Function, contractShort, collapsedText, formatGas(node.CPUInstructions, humanReadableGas), formatBytes(node.MemoryBytes), formatElapsedPerCall(node))
 	}
 
 	// Legend footer
@@ -219,6 +226,26 @@ func gasLevel(cpu uint64) string {
 		return "gas-mid"
 	default:
 		return "gas-low"
+	}
+}
+
+// formatGas converts CPU instructions into a human-readable gas string.
+// If human is false, it returns the raw integer as a string.
+func formatGas(cpu uint64, human bool) string {
+	if !human {
+		return strconv.FormatUint(cpu, 10)
+	}
+
+	switch {
+	case cpu >= 1_000_000:
+		// Threshold: 1M or more. Format as MegaGas (MGas).
+		return fmt.Sprintf("%.1f MGas", float64(cpu)/1_000_000)
+	case cpu >= 1_000:
+		// Threshold: 1k or more. Format as kiloGas (kGas).
+		return fmt.Sprintf("%.1f kGas", float64(cpu)/1_000)
+	default:
+		// Below 1k: render as raw Gas.
+		return fmt.Sprintf("%d Gas", cpu)
 	}
 }
 
