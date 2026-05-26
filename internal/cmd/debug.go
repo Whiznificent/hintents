@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/dotandev/hintents/internal/config"
+	"github.com/dotandev/hintents/internal/db"
 	"github.com/dotandev/hintents/internal/debug"
 	"github.com/dotandev/hintents/internal/decenstorage"
 	"github.com/dotandev/hintents/internal/decoder"
@@ -821,6 +822,14 @@ Local WASM Replay Mode:
 
 			fmt.Printf("\n=== Decentralised Storage ===\n")
 
+			dbSession := &db.Session{
+				TxHash:  txHash,
+				Network: networkFlag,
+				Status:  "audited",
+				Events:  lastSimResp.Events,
+				Logs:    lastSimResp.Logs,
+			}
+
 			if publishIPFSFlag {
 				result, ipfsErr := pub.PublishIPFS(ctx, auditBytes)
 				if ipfsErr != nil {
@@ -828,6 +837,7 @@ Local WASM Replay Mode:
 				} else {
 					fmt.Printf("IPFS CID : %s\n", result.CID)
 					fmt.Printf("IPFS URL : %s\n", result.URL)
+					dbSession.IPFSCID = result.CID
 				}
 			}
 
@@ -838,6 +848,17 @@ Local WASM Replay Mode:
 				} else {
 					fmt.Printf("Arweave TXID : %s\n", result.TXID)
 					fmt.Printf("Arweave URL  : %s\n", result.URL)
+					dbSession.ArweaveTXID = result.TXID
+				}
+			}
+
+			if dbSession.IPFSCID != "" || dbSession.ArweaveTXID != "" {
+				if store, dbErr := db.InitDB(); dbErr == nil {
+					if saveErr := store.SaveSession(dbSession); saveErr != nil {
+						fmt.Printf("Warning: failed to save audit session to db: %v\n", saveErr)
+					}
+				} else {
+					fmt.Printf("Warning: failed to open session db: %v\n", dbErr)
 				}
 			}
 		}

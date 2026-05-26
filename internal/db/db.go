@@ -17,14 +17,16 @@ import (
 
 // Session represents a debugging session result
 type Session struct {
-	ID        int64     `json:"id"`
-	TxHash    string    `json:"tx_hash"`
-	Network   string    `json:"network"`
-	Status    string    `json:"status"`
-	ErrorMsg  string    `json:"error_msg"`
-	Events    []string  `json:"events"`
-	Logs      []string  `json:"logs"`
-	Timestamp time.Time `json:"timestamp"`
+	ID          int64     `json:"id"`
+	TxHash      string    `json:"tx_hash"`
+	Network     string    `json:"network"`
+	Status      string    `json:"status"`
+	ErrorMsg    string    `json:"error_msg"`
+	Events      []string  `json:"events"`
+	Logs        []string  `json:"logs"`
+	IPFSCID     string    `json:"ipfs_cid,omitempty"`
+	ArweaveTXID string    `json:"arweave_txid,omitempty"`
+	Timestamp   time.Time `json:"timestamp"`
 }
 
 // Store handles database operations
@@ -67,6 +69,8 @@ func initSchema(db *sql.DB) error {
 		error_msg TEXT,
 		events TEXT,
 		logs TEXT,
+		ipfs_cid TEXT,
+		arweave_txid TEXT,
 		timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
 	);
 	CREATE INDEX IF NOT EXISTS idx_sessions_tx_hash ON sessions(tx_hash);
@@ -75,6 +79,10 @@ func initSchema(db *sql.DB) error {
 	_, err := db.Exec(query)
 	if err != nil {
 		return fmt.Errorf("failed to init schema: %w", err)
+	}
+	// Migrate existing databases that lack the new columns.
+	for _, col := range []string{"ipfs_cid", "arweave_txid"} {
+		_, _ = db.Exec("ALTER TABLE sessions ADD COLUMN " + col + " TEXT")
 	}
 	return nil
 }
@@ -85,10 +93,10 @@ func (s *Store) SaveSession(session *Session) error {
 	logsJSON, _ := json.Marshal(session.Logs)
 
 	query := `
-	INSERT INTO sessions (tx_hash, network, status, error_msg, events, logs, timestamp)
-	VALUES (?, ?, ?, ?, ?, ?, ?)
+	INSERT INTO sessions (tx_hash, network, status, error_msg, events, logs, ipfs_cid, arweave_txid, timestamp)
+	VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`
-	_, err := s.db.Exec(query, session.TxHash, session.Network, session.Status, session.ErrorMsg, string(eventsJSON), string(logsJSON), time.Now())
+	_, err := s.db.Exec(query, session.TxHash, session.Network, session.Status, session.ErrorMsg, string(eventsJSON), string(logsJSON), session.IPFSCID, session.ArweaveTXID, time.Now())
 	if err != nil {
 		return fmt.Errorf("failed to insert session: %w", err)
 	}
@@ -105,7 +113,7 @@ type SearchParams struct {
 
 // SearchSessions searches for sessions matching the params
 func (s *Store) SearchSessions(params SearchParams) ([]Session, error) {
-	query := "SELECT id, tx_hash, network, status, error_msg, events, logs, timestamp FROM sessions WHERE 1=1"
+	query := "SELECT id, tx_hash, network, status, error_msg, events, logs, ipfs_cid, arweave_txid, timestamp FROM sessions WHERE 1=1"
 	args := []interface{}{}
 
 	if params.TxHash != "" {
@@ -149,7 +157,7 @@ func (s *Store) SearchSessions(params SearchParams) ([]Session, error) {
 		var eventsRaw, logsRaw string
 		var ts time.Time
 
-		if err := rows.Scan(&sess.ID, &sess.TxHash, &sess.Network, &sess.Status, &sess.ErrorMsg, &eventsRaw, &logsRaw, &ts); err != nil {
+		if err := rows.Scan(&sess.ID, &sess.TxHash, &sess.Network, &sess.Status, &sess.ErrorMsg, &eventsRaw, &logsRaw, &sess.IPFSCID, &sess.ArweaveTXID, &ts); err != nil {
 			continue
 		}
 		sess.Timestamp = ts
