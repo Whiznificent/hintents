@@ -9,9 +9,8 @@ COMMIT_SHA?=$(shell git rev-parse HEAD 2>/dev/null || echo "unknown")
 BUILD_DATE?=$(shell date -u +"%Y-%m-%d %H:%M:%S UTC")
 
 # Go build flags
-LDFLAGS=-ldflags "-X 'github.com/dotandev/hintents/internal/cmd.Version=$(VERSION)' \
-                  -X 'github.com/dotandev/hintents/internal/cmd.CommitSHA=$(COMMIT_SHA)' \
-                  -X 'github.com/dotandev/hintents/internal/cmd.BuildDate=$(BUILD_DATE)'"
+LDFLAGS=-ldflags "-X 'github.com/dotandev/hintents/main.buildVersion=$(VERSION)' \
+                  -X 'github.com/dotandev/hintents/main.buildCommitSHA=$(COMMIT_SHA)'"
 
 # Build the main binary
 build:

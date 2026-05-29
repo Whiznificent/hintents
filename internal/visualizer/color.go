@@ -33,7 +33,7 @@ func ColorEnabled() bool {
 }
 
 // colorMap maps color names to ANSI SGR codes.
-var colorMap = map[string]string{ //nolint:unused
+var colorMap = map[string]string{ //nolint:unused // Reserved for future use in dynamic color mapping
 	"red":     sgrRed,
 	"green":   sgrGreen,
 	"yellow":  sgrYellow,
@@ -107,7 +107,7 @@ func Info() string {
 
 // Symbol returns a symbol name rendered as ASCII markers.
 //
-//nolint:gocyclo
+//nolint:gocyclo // Large switch statement mapping symbol names to ASCII representations
 func Symbol(name string) string {
 	if ColorEnabled() {
 		switch name {

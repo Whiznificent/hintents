@@ -67,7 +67,7 @@ the preferred RPC URL and network passphrase.`,
 			return err
 		}
 
-		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Initialized Erst project scaffold in %s\n", targetDir) //nolint:errcheck
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Initialized Erst project scaffold in %s\n", targetDir) //nolint:errcheck // Terminal output, write failure is non-critical
 		printInitSuccessBanner(cmd.OutOrStdout())
 		return nil
 	},
@@ -97,8 +97,8 @@ func runInitWizard(cmd *cobra.Command, opts *initScaffoldOptions) error {
 	reader := bufio.NewReader(cmd.InOrStdin())
 	out := cmd.OutOrStdout()
 
-	_, _ = fmt.Fprintln(out, "Erst init setup wizard")          //nolint:errcheck
-	_, _ = fmt.Fprintln(out, "Press Enter to accept defaults.") //nolint:errcheck
+	_, _ = fmt.Fprintln(out, "Erst init setup wizard")          //nolint:errcheck // Terminal output, write failure is non-critical
+	_, _ = fmt.Fprintln(out, "Press Enter to accept defaults.") //nolint:errcheck // Terminal output, write failure is non-critical
 
 	rpcURL, err := promptWithDefault(reader, out, "Preferred Soroban RPC URL", defaultRPCURLForNetwork(opts.Network, opts.RPCURL))
 	if err != nil {
@@ -116,7 +116,7 @@ func runInitWizard(cmd *cobra.Command, opts *initScaffoldOptions) error {
 }
 
 func promptWithDefault(reader *bufio.Reader, out io.Writer, prompt, defaultValue string) (string, error) {
-	_, _ = fmt.Fprintf(out, "%s [%s]: ", prompt, defaultValue) //nolint:errcheck
+	_, _ = fmt.Fprintf(out, "%s [%s]: ", prompt, defaultValue) //nolint:errcheck // Terminal output, write failure is non-critical
 	input, err := reader.ReadString('\n')
 	if err != nil && !errors.Is(err, io.EOF) {
 		return "", err
@@ -296,7 +296,7 @@ func printInitSuccessBanner(out io.Writer) {
 │ 3. Run Doctor                       │
 └─────────────────────────────────────┘
 `
-	_, _ = fmt.Fprint(out, banner) //nolint:errcheck
+	_, _ = fmt.Fprint(out, banner) //nolint:errcheck // Terminal output, write failure is non-critical
 }
 
 func isValidInitNetwork(network string) bool {

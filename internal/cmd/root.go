@@ -16,6 +16,7 @@ import (
 	"github.com/dotandev/hintents/internal/localization"
 	"github.com/dotandev/hintents/internal/shutdown"
 	"github.com/dotandev/hintents/internal/updater"
+	"github.com/dotandev/hintents/internal/version"
 	"github.com/spf13/cobra"
 )
 
@@ -54,7 +55,7 @@ Examples:
 Get started with 'erst debug --help' or visit the documentation.`,
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 		if VersionFlag {
-			fmt.Println(Version)
+			fmt.Println(version.Version)
 			os.Exit(0)
 		}
 
@@ -70,7 +71,7 @@ Get started with 'erst debug --help' or visit the documentation.`,
 		}
 
 		// Show "Upgrade available" banner from last run's cached check (non-blocking)
-		updater.ShowBannerFromCache(Version)
+		updater.ShowBannerFromCache(version.Version)
 		// Ping version endpoint asynchronously for next run
 		checkForUpdatesAsync()
 
@@ -78,7 +79,7 @@ Get started with 'erst debug --help' or visit the documentation.`,
 	},
 	SilenceUsage:  true,
 	SilenceErrors: true,
-	Version:       Version,
+	Version:       version.Version,
 }
 
 // Execute adds all child commands to the root command and sets flags appropriately.
@@ -154,8 +155,8 @@ func executeWithSignals(
 func checkForUpdatesAsync() {
 	// Run update check in background goroutine
 	go func() {
-		// Use the Version variable from version.go
-		checker := updater.NewChecker(Version)
+		// Use the Version variable from version package
+		checker := updater.NewChecker(version.Version)
 		checker.CheckForUpdates()
 	}()
 }

@@ -1570,7 +1570,7 @@ func WriteWATToFile(path string, wasmBytes []byte) error {
 
 // decodeOpcode returns the WAT mnemonic, operand string, and number of
 // additional bytes consumed for operands.
-func decodeOpcode(opcode byte, rest []byte) (string, string, int) { //nolint:gocyclo
+func decodeOpcode(opcode byte, rest []byte) (string, string, int) { //nolint:gocyclo // Large switch statement mapping WASM opcodes to WAT mnemonics is naturally complex
 	switch opcode {
 	// Control flow
 	case 0x00:
