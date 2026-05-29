@@ -79,6 +79,7 @@ var (
 	loadSnapshotsFlag    string
 	saveSnapshotsFlag    string
 	wasmBase64           string
+	gasCostModeFlag      bool
 )
 
 // DebugCommand holds dependencies for the debug command
@@ -991,8 +992,18 @@ func runLocalWasmReplayOnce(ctx context.Context, runner simulator.RunnerInterfac
 			fmt.Println()
 			wasmBytes, err := os.ReadFile(wasmPath)
 			if err == nil {
-				fallbackMsg := wat.FormatFallback(wasmBytes, *resp.WasmOffset, 5)
-				fmt.Println(fallbackMsg)
+				if gasCostModeFlag {
+					dis := wat.NewDisassembler(wasmBytes)
+					output, gcErr := dis.DisassembleWithGasCostMode(*resp.WasmOffset, 5)
+					if gcErr == nil {
+						fmt.Println(output)
+					} else {
+						fmt.Println(wat.FormatFallback(wasmBytes, *resp.WasmOffset, 5))
+					}
+				} else {
+					fallbackMsg := wat.FormatFallback(wasmBytes, *resp.WasmOffset, 5)
+					fmt.Println(fallbackMsg)
+				}
 			}
 		}
 	} else {
@@ -1703,6 +1714,7 @@ func init() {
 	debugCmd.Flags().StringVar(&exportSVGFlag, "export-svg", "", "Export call graph as SVG to specified file")
 	debugCmd.Flags().StringVar(&loadSnapshotsFlag, "load-snapshots", "", "Load simulation from a snapshot registry")
 	debugCmd.Flags().StringVar(&saveSnapshotsFlag, "save-snapshots", "", "Save simulation results to a snapshot registry")
+	debugCmd.Flags().BoolVar(&gasCostModeFlag, "gas-cost-mode", false, "Show average gas cost per WASM instruction type in disassembly output")
 	rootCmd.AddCommand(debugCmd)
 }
 

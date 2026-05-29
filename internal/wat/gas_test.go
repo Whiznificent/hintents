@@ -94,7 +94,7 @@ func TestGasCostAnalysis_ComplexFunction(t *testing.T) {
 		0x41, 0x03, // i32.const 3
 		0x6c,       // i32.mul
 		0x41, 0x02, // i32.const 2
-		0x6d,       // i32.div_u
+		0x6e,       // i32.div_u
 		0x1a,       // drop
 	}
 	wasm := buildMinimalWasm(body)
@@ -191,7 +191,7 @@ func TestInstructionGasCost_Assignment(t *testing.T) {
 		0x41, 0x02, // i32.const 2 (cost: 1)
 		0x6a,       // i32.add (cost: 1)
 		0x6c,       // i32.mul (cost: 3)
-		0x6d,       // i32.div_u (cost: 5)
+		0x6e,       // i32.div_u (cost: 5)
 		0x1a,       // drop (cost: 1)
 	}
 	wasm := buildMinimalWasm(body)
@@ -293,12 +293,83 @@ func TestGasCostAnalysis_EmptyModule(t *testing.T) {
 	}
 }
 
+func TestDisassembleWithGasCostMode(t *testing.T) {
+	body := []byte{
+		0x41, 0x01, // i32.const 1
+		0x41, 0x02, // i32.const 2
+		0x6a,       // i32.add
+		0x1a,       // drop
+	}
+	wasm := buildMinimalWasm(body)
+	dis := NewDisassembler(wasm)
+
+	instructions, err := dis.DecodeAll()
+	if err != nil {
+		t.Fatalf("DecodeAll failed: %v", err)
+	}
+	var addOffset uint64
+	for _, inst := range instructions {
+		if inst.Mnemonic == "i32.add" {
+			addOffset = inst.Offset
+			break
+		}
+	}
+
+	output, err := dis.DisassembleWithGasCostMode(addOffset, 2)
+	if err != nil {
+		t.Fatalf("DisassembleWithGasCostMode failed: %v", err)
+	}
+
+	if !strings.Contains(output, "gas:") {
+		t.Error("expected gas cost info in snippet output")
+	}
+	if !strings.Contains(output, "Average Gas Cost by Instruction Type") {
+		t.Error("expected average gas cost table in output")
+	}
+	if !strings.Contains(output, "i32.add") {
+		t.Error("expected i32.add in output")
+	}
+}
+
+func TestFormatAvgGasCostByType(t *testing.T) {
+	body := []byte{
+		0x41, 0x01, // i32.const 1
+		0x6c,       // i32.mul
+		0x6e,       // i32.div_u
+		0x1a,       // drop
+	}
+	wasm := buildMinimalWasm(body)
+	dis := NewDisassembler(wasm)
+
+	analysis, err := dis.AnalyzeGasCosts()
+	if err != nil {
+		t.Fatalf("AnalyzeGasCosts failed: %v", err)
+	}
+
+	output := analysis.FormatAvgGasCostByType()
+	if !strings.Contains(output, "Average Gas Cost by Instruction Type") {
+		t.Error("expected header in output")
+	}
+	if !strings.Contains(output, "i32.mul") {
+		t.Error("expected i32.mul in output")
+	}
+	// Higher-cost instructions should appear before lower-cost ones.
+	mulIdx := strings.Index(output, "i32.mul")
+	constIdx := strings.Index(output, "i32.const")
+	if mulIdx < 0 || constIdx < 0 {
+		t.Fatal("expected both i32.mul and i32.const in output")
+	}
+	if mulIdx > constIdx {
+		t.Error("expected i32.mul (cost 3) to appear before i32.const (cost 1) in sorted output")
+	}
+}
+
 func TestFormatGasAnalysis_Sorting(t *testing.T) {
 	// Create a WASM module with instructions that have different gas costs
 	body := []byte{
 		0x41, 0x01, // i32.const 1 (cost: 1)
 		0x6c,       // i32.mul (cost: 3)
-		0x6d,       // i32.div_u (cost: 5)
+		0x6e,       // i32.div_u (cost: 5)
 		0x1a,       // drop (cost: 1)
 	}
 	wasm := buildMinimalWasm(body)
