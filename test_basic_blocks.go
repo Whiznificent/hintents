@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/Whiznificent/hintents/internal/wat"
+	"github.com/dotandev/hintents/internal/wat"
 )
 
 func main() {
