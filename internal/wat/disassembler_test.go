@@ -893,7 +893,7 @@ func TestDisassembleAtWithBasicBlocks_LoopFunction(t *testing.T) {
 
 func TestAnalyzeBasicBlocks_EmptyInstructions(t *testing.T) {
 	d := NewDisassembler([]byte{})
-	analysis := d.analyzeBasicBlocks([]Instruction{})
+	analysis := d.AnalyzeBasicBlocks([]Instruction{})
 
 	if analysis == nil {
 		t.Fatal("expected analysis to be returned")

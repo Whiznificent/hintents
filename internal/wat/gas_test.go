@@ -94,7 +94,7 @@ func TestGasCostAnalysis_ComplexFunction(t *testing.T) {
 		0x41, 0x03, // i32.const 3
 		0x6c,       // i32.mul
 		0x41, 0x02, // i32.const 2
-		0x6d,       // i32.div_u
+		0x6e,       // i32.div_u
 		0x1a,       // drop
 	}
 	wasm := buildMinimalWasm(body)
