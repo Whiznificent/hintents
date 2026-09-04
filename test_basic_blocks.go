@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 
+	"github.com/dotandev/hintents/internal/wat"
 	"github.com/Whiznificent/hintents/internal/wat"
 )
 
