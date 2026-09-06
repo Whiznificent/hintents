@@ -6,7 +6,6 @@ package trace
 import (
 	"testing"
 
-	"github.com/dotandev/hintents/internal/simulator"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -149,7 +148,7 @@ func TestParseSimulationResponse_DiagnosticEvents(t *testing.T) {
 	contractID := "CA3D5KRYM6CB7OWQ6TWYRR3Z4T7GNZLKERYNZGGA5SOAOPIFY6YQGAXE"
 	resp := &SimulationResponse{
 		Status: "success",
-		DiagnosticEvents: []simulator.DiagnosticEvent{
+		DiagnosticEvents: []DiagnosticEvent{
 			{
 				EventType:       "diagnostic",
 				ContractID:      &contractID,
